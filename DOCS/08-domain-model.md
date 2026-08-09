@@ -6,7 +6,7 @@ Este documento define el modelo de dominio del sistema de gestión para una pape
 
 El modelo representa los principales conceptos del negocio, sus responsabilidades, relaciones y reglas de integridad.
 
-Su propósito es servir como puente entre los requisitos y casos de uso definidos previamente y el diseño técnico posterior.
+Su propósito es servir como puente entre los requisitos, casos de uso y el diseño de datos del sistema.
 
 Este documento será utilizado como referencia para:
 
@@ -18,7 +18,9 @@ Este documento será utilizado como referencia para:
 * Definición de reglas de negocio.
 * Diseño de auditoría e historial.
 
-El modelo de dominio **no representa todavía tablas de base de datos**. Los nombres en inglés incluidos entre paréntesis representan los nombres técnicos propuestos para su posterior implementación.
+El modelo de dominio **no representa directamente tablas de base de datos**, aunque sus conceptos deben mantener correspondencia con el modelo de datos definido posteriormente.
+
+Los nombres en inglés incluidos entre paréntesis representan los nombres técnicos utilizados para su implementación.
 
 ---
 
@@ -33,8 +35,9 @@ El modelo de dominio se deriva de los siguientes documentos:
 5. `05-functional-requirements.md`
 6. `06-non-functional-requirements.md`
 7. `07-use-cases.md`
+8. `data-dictionary.md`
 
-El modelo deberá mantenerse alineado con estos documentos.
+El Data Dictionary constituye la referencia definitiva para la estructura persistente de los datos.
 
 Cuando una decisión posterior modifique una regla o concepto del dominio, deberá actualizarse la documentación correspondiente y, cuando aplique, registrarse mediante un ADR.
 
@@ -42,118 +45,74 @@ Cuando una decisión posterior modifique una regla o concepto del dominio, deber
 
 # 3. Principios del dominio
 
-El sistema deberá preservar principalmente cuatro propiedades:
+El sistema deberá preservar principalmente las siguientes propiedades:
 
 1. **Las ventas no deben perderse.**
 2. **El inventario debe ser confiable.**
 3. **Los ingresos y egresos deben ser confiables.**
 4. **Debe ser posible identificar quién realizó o modificó una operación.**
+5. **Los valores utilizados históricamente deben conservarse.**
 
 A partir de estos principios:
 
 * Las operaciones históricas no deberán eliminarse físicamente.
-* Las modificaciones importantes deberán conservar historial.
+* Las modificaciones administrativas relevantes deberán conservar historial.
 * Las operaciones críticas deberán identificar al usuario responsable.
-* Los precios históricos deberán conservarse.
+* Los precios utilizados en operaciones deberán conservarse.
+* Los descuentos utilizados en operaciones deberán conservarse.
+* Los costos históricos de compras deberán conservarse.
 * Los movimientos de inventario deberán conservarse.
 * Las operaciones de caja deberán conservarse.
 * Las ventas canceladas deberán conservar su registro.
-* Las devoluciones deberán relacionarse con la venta original.
-* Las operaciones realizadas sin conexión deberán poder sincronizarse posteriormente.
+* Las devoluciones deberán relacionarse con la venta y el detalle de venta originales.
+* Las configuraciones modificadas no deberán alterar operaciones históricas.
+
+El sistema utilizará tres mecanismos complementarios para preservar la información:
+
+1. **Snapshots:** valores utilizados directamente en una operación.
+2. **Historial operativo:** conservación de las operaciones realizadas.
+3. **Auditoría:** registro de modificaciones administrativas y acciones relevantes.
 
 ---
 
-# 4. Vista general del dominio
+# 4. Contexto del negocio (Business)
 
-El dominio se organiza principalmente en los siguientes grupos:
+El negocio representa el contexto dentro del cual se ejecutan las operaciones de la papelería.
 
-```text
-                    NEGOCIO
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-        ▼              ▼              ▼
-     Usuarios      Catálogo       Clientes
-        │              │              │
-        │              │              ├── Ventas
-        │              │              └── Apartados
-        │              │
-        │              └── Inventario
-        │
-        └── Auditoría
+En el modelo actual, el negocio **no se representa mediante una entidad persistente independiente**.
 
-     Proveedores
-          │
-          └── Compras
-                │
-                └── Inventario
-
-     Ventas
-        │
-        ├── Productos / Servicios
-        ├── Pagos
-        ├── Facturación
-        └── Devoluciones
-
-     Apartados
-        │
-        ├── Productos
-        ├── Pagos
-        └── Devoluciones / Saldos
-
-     Caja
-        │
-        ├── Ingresos
-        ├── Egresos
-        └── Corte de caja
-
-     Configuración
-        │
-        ├── Inventario
-        ├── Servicios
-        ├── Descuentos
-        ├── Pagos
-        └── Apartados
-```
-
----
-
-# 5. Negocio (Business)
-
-Representa la papelería que utiliza el sistema.
-
-## Responsabilidad
-
-El negocio es el contexto principal dentro del cual existen:
+Conceptualmente, todas las operaciones pertenecen al contexto del negocio, incluyendo:
 
 * Usuarios.
 * Clientes.
-* Productos.
-* Servicios.
-* Proveedores.
-* Ventas.
-* Compras.
+* Catálogo.
 * Inventario.
-* Cajas.
-* Configuraciones.
+* Ventas.
+* Apartados.
+* Compras.
+* Caja.
+* Facturación.
+* Configuración.
+* Auditoría.
 
-## Consideraciones
+Actualmente el sistema contempla una única papelería y una única sucursal.
 
-Actualmente el sistema contempla una única sucursal.
-
-Sin embargo, el modelo deberá evitar decisiones que impidan posteriormente incorporar múltiples sucursales.
+El modelo no incorpora todavía una entidad `Branch`, pero deberá evitar decisiones que impidan su incorporación posterior.
 
 ---
 
-# 6. Usuario (User)
+# 5. Usuario (User)
 
-Representa a una persona autorizada para utilizar el sistema administrativo.
+Representa a un empleado autorizado para utilizar el sistema.
 
 ## Información conceptual
 
 * Identificador.
-* Nombre.
 * Nombre de usuario.
+* Contraseña almacenada de forma segura.
+* Nombre.
+* Apellido paterno.
+* Apellido materno.
 * Estado.
 * Roles asignados.
 * Fecha de creación.
@@ -169,18 +128,19 @@ BLOQUEADO (BLOCKED)
 
 ## Reglas
 
-* Cada trabajador deberá poder tener su propio usuario.
+* Cada trabajador podrá tener su propio usuario.
 * Un usuario inactivo no podrá realizar nuevas operaciones.
 * Un usuario podrá volver a activarse.
-* Las operaciones relevantes deberán identificar al usuario que las realizó.
+* Los usuarios no deberán eliminarse físicamente cuando dejen de trabajar.
+* Las operaciones relevantes deberán identificar al usuario responsable.
 
 ---
 
-# 7. Rol (Role)
+# 6. Rol (Role)
 
-Representa un conjunto de permisos asignados a un usuario.
+Representa un conjunto de permisos asignables a uno o varios usuarios.
 
-Ejemplos conceptuales:
+Ejemplos:
 
 ```text
 Cajero
@@ -190,11 +150,15 @@ Gerente
 Propietario
 ```
 
-Los roles deberán poder adaptarse a las responsabilidades reales del negocio.
+Un rol puede estar asignado a múltiples usuarios.
+
+Un usuario puede tener múltiples roles.
+
+La relación entre usuarios y roles se representa conceptualmente mediante `UserRole`.
 
 ---
 
-# 8. Permiso (Permission)
+# 7. Permiso (Permission)
 
 Representa una operación específica que un usuario puede realizar.
 
@@ -218,15 +182,13 @@ Consultar auditoría
 
 Los permisos deberán permitir restringir operaciones sensibles.
 
-Por ejemplo, un cajero podrá registrar ventas sin tener permiso para modificar precios o existencias.
+La relación entre roles y permisos se representa conceptualmente mediante `RolePermission`.
 
 ---
 
-# 9. Cliente (Customer)
+# 8. Cliente (Customer)
 
-Representa a una persona o entidad que adquiere productos o servicios.
-
-## Características
+Representa a una persona que adquiere productos o servicios.
 
 Un cliente puede:
 
@@ -236,67 +198,46 @@ Un cliente puede:
 * Realizar apartados.
 * Realizar múltiples pagos sobre un apartado.
 * Tener historial comercial.
+* Registrar interés por productos.
 
-## Regla
+## Reglas
 
-No es obligatorio registrar al cliente para realizar una venta normal.
-
-Sin embargo, ciertas operaciones requieren que exista un cliente registrado, especialmente los apartados.
+* No es obligatorio registrar al cliente para realizar una venta normal.
+* Una venta puede existir sin cliente registrado.
+* Un apartado requiere un cliente registrado.
+* Un cliente puede tener múltiples ventas.
+* Un cliente puede tener múltiples apartados.
+* Un cliente puede tener múltiples registros de interés por productos.
 
 ---
 
-# 10. Datos fiscales (FiscalData)
+# 9. Datos fiscales (FiscalData)
 
-Representan la información fiscal proporcionada por un cliente para emitir facturas.
+Representan la información fiscal proporcionada por un cliente para fines de facturación.
 
 ## Información conceptual
-
-Puede incluir:
 
 * Identificador fiscal.
 * Nombre o razón social.
 * Régimen fiscal.
 * Código postal.
 * Uso fiscal.
-* Información necesaria para facturación.
+* Fecha de creación.
+* Fecha de modificación.
 
 ## Reglas
 
-* El acceso debe estar restringido.
-* El cliente debe autorizar su conservación cuando corresponda.
-* Los cambios deberán quedar registrados cuando sean relevantes.
+* Los datos fiscales pertenecen a un cliente.
+* Un cliente puede tener registros fiscales.
+* Una factura debe identificar los datos fiscales utilizados.
+* El acceso a esta información deberá estar restringido.
+* Los datos deberán almacenarse únicamente cuando el cliente haya aceptado proporcionarlos.
+
+Los datos fiscales utilizados para una factura deben conservar su referencia histórica.
 
 ---
 
-# 11. Producto (Product)
-
-Representa un artículo físico que la papelería comercializa.
-
-## Información conceptual
-
-* Identificador.
-* Nombre.
-* Código de producto.
-* Código de barras.
-* Descripción.
-* Marca.
-* Categoría.
-* Precio de venta.
-* Costo.
-* Nivel de alerta de existencias.
-* Estado.
-
-## Reglas
-
-* Cada producto puede tener un nivel de alerta diferente.
-* El nivel de alerta debe poder modificarse desde el sistema.
-* El precio debe ser configurable.
-* Los cambios de precio deben conservar historial.
-* El producto debe estar relacionado con sus movimientos de inventario.
-
----
-
-# 12. Categoría (Category)
+# 10. Categoría (Category)
 
 Representa una clasificación de productos.
 
@@ -311,21 +252,63 @@ Oficina
 Arte
 ```
 
-Las categorías deberán poder administrarse desde el sistema.
+Una categoría puede contener múltiples productos.
+
+Un producto pertenece a una categoría.
+
+Las categorías pueden estar activas o inactivas.
 
 ---
 
-# 13. Marca (Brand)
+# 11. Marca (Brand)
 
 Representa la marca comercial de un producto.
 
 Una marca puede estar asociada a múltiples productos.
 
+Un producto puede no tener una marca registrada.
+
+Las marcas pueden estar activas o inactivas.
+
 ---
 
-# 14. Servicio (Service)
+# 12. Producto (Product)
 
-Representa una actividad que la papelería ofrece al cliente.
+Representa un artículo físico comercializado por la papelería.
+
+## Información conceptual
+
+* Identificador.
+* SKU.
+* Código de barras.
+* Nombre.
+* Descripción.
+* Categoría.
+* Marca.
+* Precio de venta actual.
+* Costo actual.
+* Nivel de alerta de existencias.
+* Estado.
+* Fecha de creación.
+* Fecha de modificación.
+
+## Reglas
+
+* Cada producto debe pertenecer a una categoría.
+* Un producto puede no tener marca.
+* El SKU identifica de forma única al producto.
+* El código de barras puede no existir.
+* El precio actual puede modificarse.
+* El costo actual puede modificarse.
+* El nivel de alerta puede configurarse individualmente.
+* Los valores utilizados en operaciones históricas no deberán depender del precio actual del producto.
+* Un producto puede tener múltiples proveedores.
+
+---
+
+# 13. Servicio (Service)
+
+Representa una actividad ofrecida por la papelería.
 
 Ejemplos:
 
@@ -337,25 +320,31 @@ Engargolados
 Enmicados
 ```
 
-## Regla
+Los servicios pueden configurarse sin modificar el código fuente.
 
-Los servicios deben poder registrarse y configurarse desde el sistema sin modificar el código fuente.
+Un servicio puede tener múltiples tarifas.
 
-Por ejemplo, el negocio deberá poder crear posteriormente:
-
-```text
-Impresión fotográfica
-```
-
-y configurar su precio desde el sistema.
+Los servicios pueden estar activos o inactivos.
 
 ---
 
-# 15. Tarifa de servicio (ServiceRate)
+# 14. Tarifa de servicio (ServiceRate)
 
-Representa el precio y las condiciones utilizadas para calcular el costo de un servicio.
+Representa una tarifa utilizada para determinar el precio de un servicio.
 
-Por ejemplo, una impresión puede depender de:
+## Información conceptual
+
+* Servicio.
+* Nombre de tarifa.
+* Precio unitario.
+* Configuración adicional.
+* Estado.
+* Fecha de creación.
+* Fecha de modificación.
+
+La configuración adicional puede representar condiciones específicas del servicio.
+
+Por ejemplo:
 
 ```text
 Tipo:
@@ -365,40 +354,44 @@ Tipo:
 Tamaño:
 - Carta
 - Oficio
-
-Cantidad:
-- Número de páginas
 ```
 
-Las reglas de cálculo deberán ser configurables.
+Una tarifa pertenece a un servicio.
+
+Un servicio puede tener múltiples tarifas.
 
 ---
 
-# 16. Inventario (Inventory)
+# 15. Inventario (Inventory)
 
-Representa las existencias de los productos.
+Representa el estado actual de las existencias de un producto.
 
-Para cada producto se deberá poder distinguir conceptualmente:
+Para cada producto se distinguen conceptualmente:
 
 ```text
-Existencia física
+Existencia física registrada
 Existencia reservada
 Existencia disponible
 ```
 
-La existencia disponible deberá considerar las unidades comprometidas en apartados.
+La existencia disponible corresponde a la cantidad registrada menos las unidades reservadas.
 
-## Regla
+## Reglas
 
-El inventario debe poder explicar cómo se llegó a una existencia determinada mediante sus movimientos históricos.
+* Cada producto debe tener un registro de inventario.
+* Un producto tiene un único inventario actual.
+* La cantidad registrada no puede ser negativa.
+* La cantidad reservada no puede ser negativa.
+* La cantidad reservada no puede superar la existencia registrada.
+* El inventario actual no sustituye el historial de movimientos.
 
 ---
 
-# 17. Movimiento de inventario (InventoryMovement)
+# 16. Movimiento de inventario (InventoryMovement)
 
-Representa cualquier operación que afecte las existencias de un producto.
+Representa una operación que modifica las existencias de un producto.
 
-## Tipos
+## Tipos conceptuales
 
 ```text
 Entrada por compra
@@ -415,54 +408,57 @@ Liberación de reserva
 * Producto.
 * Tipo de movimiento.
 * Cantidad.
-* Fecha y hora.
-* Usuario.
-* Operación relacionada.
+* Referencia de la operación relacionada, cuando exista.
+* Usuario responsable.
 * Motivo.
 * Observaciones.
+* Fecha y hora.
 
-## Regla
+Los movimientos de inventario son históricos y no deberán eliminarse físicamente.
 
-Los movimientos de inventario no deberán eliminarse físicamente.
+Un movimiento puede estar relacionado con una venta, compra, devolución, apartado u otra operación según corresponda.
 
 ---
 
-# 18. Incidencia de inventario (InventoryIncident)
+# 17. Incidencia de inventario (InventoryIncident)
 
-Representa una diferencia, anomalía o problema relacionado con las existencias.
+Representa una diferencia o anomalía relacionada con las existencias.
 
-### Ejemplo
-
-El sistema indica:
+Ejemplo:
 
 ```text
-20 unidades
+Existencia registrada: 20
+Existencia física: 15
+Diferencia: -5
 ```
 
-pero físicamente existen:
-
-```text
-15 unidades
-```
-
-La diferencia debe poder registrarse como una incidencia.
-
-## Información
+## Información conceptual
 
 * Producto.
-* Existencia registrada.
+* Existencia registrada al momento de la incidencia.
 * Existencia física.
 * Diferencia.
-* Fecha.
-* Usuario que reportó.
 * Motivo.
-* Observaciones.
-* Resolución.
-* Usuario que resolvió.
+* Estado.
+* Usuario que reportó.
+* Usuario que resolvió, cuando corresponda.
+* Notas.
+* Fecha de creación.
+* Fecha de resolución.
+
+## Reglas
+
+* Una incidencia pertenece a un producto.
+* Debe identificar al usuario que la reportó.
+* Puede permanecer abierta.
+* El usuario que resuelve puede ser diferente al usuario que reportó.
+* Mientras permanezca abierta, la resolución puede no existir.
+
+La incidencia no debe modificar silenciosamente el historial de movimientos.
 
 ---
 
-# 19. Venta (Sale)
+# 18. Venta (Sale)
 
 Representa una operación comercial mediante la cual se entregan productos y/o servicios a cambio de un pago.
 
@@ -480,108 +476,122 @@ DEVUELTA (RETURNED)
 ## Información conceptual
 
 * Identificador.
-* Número de venta.
-* Fecha y hora.
 * Cliente, si aplica.
-* Usuario.
-* Conceptos vendidos.
-* Descuentos.
-* Total.
+* Usuario responsable.
 * Estado.
-* Pagos.
+* Subtotal.
+* Descuento total.
+* Impuestos.
+* Total.
+* Fecha de creación.
+* Fecha de finalización.
+* Fecha de cancelación.
 
-## Flujo principal
+## Reglas
 
-```text
-En proceso
-    ↓
-Pendiente de pago
-    ↓
-Completada
-```
-
-Una venta completada no deberá eliminarse.
+* Una venta puede realizarse sin cliente.
+* Una venta debe contener uno o más conceptos.
+* Una venta puede contener productos y servicios.
+* Una venta puede tener uno o varios pagos.
+* Una venta completada no debe eliminarse.
+* Una venta cancelada conserva su historial.
+* Una devolución no elimina la venta original.
 
 ---
 
-# 20. Detalle de venta (SaleItem)
+# 19. Detalle de venta (SaleItem)
 
 Representa un producto o servicio incluido en una venta.
 
-## Información
-
-* Producto o servicio.
-* Descripción.
-* Cantidad.
-* Precio unitario.
-* Descuento.
-* Impuestos, cuando correspondan.
-* Subtotal.
-
-## Regla de historial
-
-El detalle debe conservar los valores utilizados en el momento de la venta.
-
-Ejemplo:
+Un detalle de venta debe representar **exactamente uno** de los siguientes conceptos:
 
 ```text
-Producto: Pluma azul
-
-Precio actual: $12
-
-Precio registrado en una venta anterior: $10
+Producto
+o
+Servicio
 ```
 
-La venta histórica debe continuar mostrando:
+## Información conceptual
+
+* Venta.
+* Producto, cuando corresponda.
+* Servicio, cuando corresponda.
+* Descripción histórica.
+* Cantidad.
+* Precio unitario histórico.
+* Descuento aplicado, cuando corresponda.
+* Tipo de descuento.
+* Valor del descuento.
+* Importe del descuento.
+* Impuesto.
+* Subtotal.
+
+## Regla
+
+No puede existir simultáneamente un producto y un servicio en el mismo detalle.
+
+```text
+Producto → Sí
+Servicio → No
+```
+
+o:
+
+```text
+Producto → No
+Servicio → Sí
+```
+
+## Historial
+
+El detalle conserva los valores utilizados en el momento de la venta.
+
+Por ejemplo:
+
+```text
+Precio actual: $12
+Precio utilizado en venta histórica: $10
+```
+
+La venta histórica continuará mostrando:
 
 ```text
 $10
 ```
 
-aunque posteriormente el producto tenga un precio de $12.
+---
+
+# 20. Método de pago (PaymentMethod)
+
+Representa el medio mediante el cual se realiza un pago.
+
+Actualmente contempla:
+
+```text
+Efectivo (CASH)
+Tarjeta (CARD)
+Transferencia (BANK_TRANSFER)
+```
+
+Los métodos de pago son configurables y pueden activarse o desactivarse.
+
+El método de pago representa el medio utilizado y no la integración tecnológica utilizada para procesarlo.
 
 ---
 
-# 21. Ticket (Ticket)
+# 21. Pago de venta (Payment)
 
-Representa el comprobante generado después de registrar correctamente el pago de una venta.
+Representa un importe recibido como consecuencia de una venta.
 
-## Información
+## Información conceptual
 
-* Número de ticket.
-* Venta asociada.
-* Fecha y hora.
-* Conceptos.
-* Cantidades.
-* Precios.
-* Descuentos.
-* Total.
-* Forma de pago.
-
-## Regla
-
-El ticket se genera después de registrar el pago de la venta.
-
----
-
-# 22. Pago (Payment)
-
-Representa un importe recibido como consecuencia de una operación.
-
-Puede estar relacionado con:
-
-* Una venta.
-* Un apartado.
-
-## Información
-
-* Identificador.
+* Venta.
+* Método de pago.
 * Importe.
-* Forma de pago.
-* Fecha y hora.
-* Usuario.
 * Estado.
-* Referencia.
+* Referencia externa, cuando corresponda.
+* Usuario responsable.
+* Fecha y hora.
 
 ## Estados
 
@@ -592,45 +602,71 @@ RECHAZADO (REJECTED)
 CANCELADO (CANCELLED)
 ```
 
+Un pago pertenece a una venta.
+
+Una venta puede tener múltiples pagos.
+
+La referencia externa puede no existir, especialmente en pagos en efectivo.
+
 ---
 
-# 23. Forma de pago (PaymentMethod)
+# 22. Ticket (Ticket)
 
-Representa el medio utilizado para realizar un pago.
+Representa el comprobante generado para una venta.
 
-Actualmente contempla:
+## Información conceptual
+
+* Venta.
+* Número de ticket.
+* Fecha y hora de emisión.
+
+Una venta puede tener como máximo un ticket.
+
+Un ticket pertenece exclusivamente a una venta.
+
+El ticket se genera como consecuencia de una venta correctamente registrada según las reglas del sistema.
+
+---
+
+# 23. Descuento (Discount)
+
+Representa una configuración de descuento que puede aplicarse a un detalle de venta.
+
+## Información conceptual
+
+* Nombre.
+* Tipo.
+* Valor.
+* Condiciones.
+* Fecha de inicio.
+* Fecha de finalización.
+* Estado.
+* Fecha de creación.
+* Fecha de modificación.
+
+## Reglas
+
+* Un descuento puede aplicarse a múltiples detalles de venta.
+* Un detalle de venta puede no tener descuento.
+* El descuento configurado puede modificarse posteriormente.
+* Modificar el descuento no debe alterar ventas históricas.
+* El detalle de venta conserva el tipo y valor aplicados.
+* Dos descuentos pueden tener el mismo valor y representar reglas diferentes.
+
+Por ejemplo:
 
 ```text
-Efectivo (CASH)
-Tarjeta (CARD)
-Transferencia (BANK_TRANSFER)
+Estudiante → 15%
+Tercera edad → 15%
 ```
 
-Las formas de pago deberán ser configurables.
-
-## Consideración
-
-La integración con terminales de pago podrá complementar el registro de pagos con tarjeta.
-
-El dominio deberá mantener separado el concepto de:
-
-```text
-Forma de pago
-```
-
-de:
-
-```text
-Integración externa de pago
-```
-
-para no depender de un proveedor específico.
+Son descuentos diferentes aunque compartan el mismo porcentaje.
 
 ---
 
 # 24. Devolución (Return)
 
-Representa la devolución total o parcial de productos pertenecientes a una venta.
+Representa una devolución total o parcial relacionada con una venta.
 
 ## Tipos
 
@@ -639,29 +675,51 @@ Parcial (PARTIAL)
 Total (TOTAL)
 ```
 
+## Información conceptual
+
+* Venta original.
+* Usuario responsable.
+* Tipo.
+* Motivo.
+* Total.
+* Estado.
+* Fecha y hora.
+
 ## Reglas
 
 * Debe existir una venta original.
-* Puede devolver solamente algunos productos.
-* La cantidad devuelta no puede superar la cantidad originalmente vendida menos las cantidades previamente devueltas.
-* La devolución no elimina la venta original.
-* La devolución debe conservar su relación con la venta.
-* El dinero deberá devolverse mediante el mismo método utilizado para el pago original.
-* Las devoluciones deben quedar auditadas.
+* Puede ser parcial o total.
+* Una venta puede tener múltiples devoluciones.
+* Una devolución no elimina la venta original.
+* Las cantidades devueltas deben estar relacionadas con los detalles de venta originales.
+* La devolución debe conservarse históricamente.
+* La devolución debe generar los movimientos correspondientes de inventario.
+* El reembolso deberá respetar las reglas del método de pago original.
 
 ---
 
 # 25. Detalle de devolución (ReturnItem)
 
-Representa un producto específico incluido en una devolución.
+Representa una cantidad específica devuelta de un detalle de venta.
 
-## Información
+## Información conceptual
 
-* Producto.
-* Venta original.
+* Devolución.
+* Detalle de venta original.
 * Cantidad.
 * Importe.
-* Motivo.
+
+La relación con `SaleItem` permite determinar exactamente qué concepto de la venta está siendo devuelto.
+
+## Regla
+
+La cantidad acumulada devuelta de un detalle no puede superar la cantidad originalmente vendida.
+
+```text
+Cantidad devuelta acumulada
+≤
+Cantidad vendida
+```
 
 ---
 
@@ -669,145 +727,173 @@ Representa un producto específico incluido en una devolución.
 
 Representa una operación mediante la cual un cliente reserva uno o varios productos para adquirirlos posteriormente.
 
-## Reglas principales
+## Información conceptual
 
-* El cliente debe estar registrado.
-* Puede existir más de un apartado simultáneamente.
-* El apartado debe tener una fecha de vencimiento.
-* Debe existir un anticipo mínimo configurable.
-* El cliente puede realizar múltiples pagos.
+* Cliente.
+* Usuario responsable.
+* Estado.
+* Total.
+* Importe pagado.
+* Importe pendiente.
+* Porcentaje mínimo aplicado.
+* Porcentaje de retención por cancelación aplicado.
+* Porcentaje de retención por vencimiento aplicado.
+* Fecha de creación.
+* Fecha de vencimiento.
+* Fecha de liquidación.
+* Fecha de cancelación.
+
+## Reglas
+
+* El cliente es obligatorio.
+* Un cliente puede tener múltiples apartados.
+* Un apartado debe tener fecha de vencimiento.
 * Los productos apartados quedan reservados.
-* Al liquidar el apartado, los productos se entregan.
-* Si el cliente cancela, se aplican las reglas de devolución configuradas.
-* Si vence el plazo, se aplican las reglas de vencimiento configuradas.
+* Un apartado puede recibir múltiples pagos.
+* Al liquidar el apartado, los productos pueden entregarse.
+* Si el cliente cancela, se aplican las reglas configuradas.
+* Si el apartado vence, se aplican las reglas configuradas.
+* Los valores de configuración utilizados deben conservarse dentro del apartado.
 
 ---
 
-# 27. Configuración de apartados (ReservationConfiguration)
-
-Las políticas de apartados no deberán estar codificadas como valores fijos.
-
-Deberán poder configurarse desde el sistema:
-
-* Porcentaje mínimo para apartar.
-* Duración máxima.
-* Porcentaje a conservar por cancelación dentro del plazo.
-* Porcentaje a conservar por vencimiento.
-* Reglas de devolución.
-
-### Ejemplo
-
-Una configuración podría establecer:
-
-```text
-Anticipo mínimo: 30%
-
-Cancelación dentro del plazo:
-15% del total conservado
-
-Vencimiento:
-30% del total conservado
-```
-
-Pero otra papelería podría configurar:
-
-```text
-Anticipo mínimo: 40%
-
-Cancelación:
-5% conservado
-
-Vencimiento:
-20% conservado
-```
-
-Los porcentajes son configuraciones del negocio, no reglas rígidas del dominio.
-
----
-
-# 28. Detalle de apartado (ReservationItem)
+# 27. Detalle de apartado (ReservationItem)
 
 Representa un producto incluido en un apartado.
 
-## Información
+## Información conceptual
 
+* Apartado.
 * Producto.
 * Cantidad.
-* Precio al momento de apartar.
+* Precio unitario histórico.
 * Subtotal.
 
-El precio deberá conservarse aunque posteriormente cambie el precio del producto.
+## Reglas
+
+* Un apartado contiene uno o más productos.
+* La cantidad debe ser positiva.
+* El precio utilizado al crear el apartado debe conservarse.
+* Un cambio posterior del precio del producto no modifica el precio del apartado.
 
 ---
 
-# 29. Pago de apartado (ReservationPayment)
+# 28. Pago de apartado (ReservationPayment)
 
 Representa un pago realizado sobre un apartado.
 
-Permite registrar múltiples pagos.
+Es un concepto independiente de `Payment`, debido a que los pagos de ventas y los pagos de apartados pertenecen a operaciones diferentes.
 
-### Ejemplo
+## Información conceptual
 
-```text
-Total del apartado: $1,000
-
-Primer pago: $300
-Segundo pago: $200
-Tercer pago: $500
-
-Total pagado: $1,000
-```
-
-El sistema deberá calcular automáticamente:
-
-```text
-Total pagado
-Saldo pendiente
-Importe sujeto a devolución
-Importe conservado
-```
-
-según el estado y las reglas configuradas.
-
----
-
-# 30. Interés por producto (ProductInterest)
-
-Representa el interés de un cliente por adquirir un producto que no está disponible o que aún no se encuentra registrado.
-
-## Información
-
-* Producto, si existe.
-* Descripción solicitada.
-* Cliente, si está registrado.
-* Fecha.
-* Usuario.
-* Observaciones.
+* Apartado.
+* Método de pago.
+* Importe.
 * Estado.
+* Referencia.
+* Usuario responsable.
+* Fecha y hora.
 
-## Regla
+## Reglas
 
-El registro no deberá depender de que el cliente esté previamente registrado.
-
-Si el cliente está registrado, el interés deberá quedar asociado a su historial.
+* Un apartado puede tener múltiples pagos.
+* Cada pago pertenece a un único apartado.
+* El importe debe ser positivo.
+* Los pagos se conservan históricamente.
+* El sistema debe poder determinar el importe total pagado y el saldo pendiente.
 
 ---
 
-# 31. Proveedor (Supplier)
+# 29. Configuración de apartados (ReservationConfiguration)
+
+Representa las políticas vigentes para los apartados.
+
+## Información conceptual
+
+* Porcentaje mínimo.
+* Días de vigencia.
+* Porcentaje de retención por cancelación.
+* Porcentaje de retención por vencimiento.
+* Estado.
+* Fecha de creación.
+* Fecha de modificación.
+
+## Reglas
+
+La configuración es independiente de los apartados existentes.
+
+No debe existir una dependencia histórica directa entre un apartado y la configuración actualmente activa.
+
+Cuando se crea un apartado, los valores utilizados se copian conceptualmente como snapshots:
+
+```text
+minimum_percentage_applied
+cancellation_retention_percentage_applied
+expiration_retention_percentage_applied
+```
+
+Por lo tanto, si la configuración cambia:
+
+```text
+30% → 40%
+```
+
+un apartado existente que utilizó:
+
+```text
+30%
+```
+
+debe continuar conservando:
+
+```text
+30%
+```
+
+La configuración actual no modifica operaciones históricas.
+
+---
+
+# 30. Proveedor (Supplier)
 
 Representa una persona o empresa que suministra productos a la papelería.
 
-## Información
+## Información conceptual
 
 * Nombre.
-* Datos de contacto.
+* Teléfono.
+* Correo.
+* Dirección.
 * Estado.
-* Condiciones comerciales.
-* Observaciones.
+* Fecha de creación.
+* Fecha de modificación.
 
-Un proveedor puede ofrecer múltiples productos.
+Un proveedor puede suministrar múltiples productos.
 
 Un producto puede adquirirse de múltiples proveedores.
+
+La relación N:M se representa mediante `ProductSupplier`.
+
+---
+
+# 31. Relación producto-proveedor (ProductSupplier)
+
+Representa la relación comercial entre un producto y un proveedor.
+
+## Información conceptual
+
+* Producto.
+* Proveedor.
+* Código del producto utilizado por el proveedor.
+* Último precio de compra conocido.
+* Estado.
+
+## Reglas
+
+* Un producto puede tener múltiples proveedores.
+* Un proveedor puede ofrecer múltiples productos.
+* La relación puede activarse o desactivarse.
+* El último precio conocido no sustituye el costo histórico registrado en las compras.
 
 ---
 
@@ -825,15 +911,25 @@ RECIBIDA (RECEIVED)
 CANCELADA (CANCELLED)
 ```
 
-## Información
+## Información conceptual
 
 * Proveedor.
-* Fecha.
-* Productos.
-* Cantidades.
-* Precios.
+* Usuario responsable.
 * Estado.
-* Incidencias.
+* Subtotal.
+* Total.
+* Fecha de pedido.
+* Fecha de recepción.
+* Fecha de creación.
+
+## Reglas
+
+* Una compra pertenece a un proveedor.
+* Una compra contiene uno o más productos.
+* Debe conservarse el costo histórico de cada producto.
+* La cantidad solicitada y la cantidad recibida deben distinguirse.
+* Las diferencias de recepción pueden generar incidencias.
+* Las compras históricas deben conservarse.
 
 ---
 
@@ -841,31 +937,28 @@ CANCELADA (CANCELLED)
 
 Representa un producto incluido en una compra.
 
-## Información
+## Información conceptual
 
+* Compra.
 * Producto.
 * Cantidad solicitada.
 * Cantidad recibida.
-* Precio de compra.
+* Costo unitario histórico.
 * Subtotal.
 
-Esto permite detectar diferencias entre:
+## Reglas
 
-```text
-Cantidad solicitada
-```
+La cantidad solicitada debe ser positiva.
 
-y:
+La cantidad recibida puede ser cero cuando todavía no se haya recibido mercancía.
 
-```text
-Cantidad recibida
-```
+El costo unitario utilizado en la compra debe conservarse aunque posteriormente cambie el costo actual del producto.
 
 ---
 
 # 34. Incidencia de compra (PurchaseIncident)
 
-Representa un problema detectado al recibir mercancía.
+Representa un problema detectado durante la recepción de mercancía.
 
 ## Tipos
 
@@ -877,41 +970,31 @@ Cantidad incorrecta (WRONG_QUANTITY)
 Otro (OTHER)
 ```
 
-## Posibles resoluciones
+## Información conceptual
 
-```text
-Reposición (REPLACEMENT)
-Devolución (RETURN)
-Nota de crédito (CREDIT_NOTE)
-Ajuste (ADJUSTMENT)
-```
-
-La incidencia deberá conservarse como parte del historial de la compra.
-
----
-
-# 35. Descuento (Discount)
-
-Representa una reducción aplicada al precio de una operación.
-
-## Información
-
+* Compra.
+* Detalle de compra.
 * Tipo.
-* Valor.
-* Condiciones.
-* Vigencia.
-* Usuario que lo aplicó.
-* Cliente o condición aplicable.
+* Cantidad afectada.
+* Descripción.
+* Resolución.
+* Estado.
+* Fecha de creación.
+* Fecha de resolución.
 
-Los descuentos deberán ser configurables.
+## Reglas
 
-Las operaciones de descuento relevantes deberán quedar auditadas.
+* Una incidencia pertenece a una compra.
+* Una incidencia identifica el detalle de compra afectado.
+* Una incidencia puede permanecer pendiente.
+* La resolución puede no existir mientras la incidencia esté pendiente.
+* Las incidencias forman parte del historial de la compra.
 
 ---
 
-# 36. Caja (CashRegister)
+# 35. Caja (CashRegister)
 
-Representa una caja utilizada para registrar operaciones económicas durante una jornada.
+Representa una caja utilizada para registrar operaciones económicas.
 
 ## Estados
 
@@ -920,18 +1003,23 @@ ABIERTA (OPEN)
 CERRADA (CLOSED)
 ```
 
-## Información
+## Información conceptual
 
-* Identificador.
 * Usuario responsable.
-* Fecha de apertura.
-* Fecha de cierre.
-* Saldo inicial.
 * Estado.
+* Monto inicial.
+* Fecha y hora de apertura.
+* Fecha y hora de cierre.
+
+Una caja pertenece al usuario que la abrió/responsable de la operación de caja.
+
+Una caja puede tener múltiples movimientos.
+
+Una caja puede tener uno o varios cortes según las reglas operativas definidas.
 
 ---
 
-# 37. Movimiento de caja (CashMovement)
+# 36. Movimiento de caja (CashMovement)
 
 Representa una entrada o salida económica registrada en una caja.
 
@@ -945,48 +1033,52 @@ Egreso (EXPENSE)
 Ajuste (ADJUSTMENT)
 ```
 
-## Información
+## Información conceptual
 
 * Caja.
 * Tipo.
 * Importe.
+* Referencia de la operación relacionada, cuando exista.
+* Usuario responsable.
+* Descripción.
 * Fecha y hora.
-* Usuario.
-* Concepto.
-* Operación relacionada.
-* Observaciones.
 
-Los ingresos y egresos deberán conservar historial.
+## Reglas
+
+* Los movimientos de caja deben conservarse.
+* Los movimientos relacionados con operaciones deben poder identificar su referencia.
+* Los ingresos y egresos manuales deben registrar descripción y usuario responsable.
 
 ---
 
-# 38. Corte de caja (CashClosing)
+# 37. Corte de caja (CashClosing)
 
-Representa el proceso de conciliación de una caja al finalizar una jornada.
+Representa la conciliación de una caja.
 
-## Información
+## Información conceptual
 
 * Caja.
-* Usuario.
-* Fecha y hora.
-* Total esperado.
-* Total registrado.
+* Usuario responsable.
+* Monto esperado.
+* Monto contado.
 * Diferencia.
 * Observaciones.
+* Fecha y hora.
 
-## Regla
+## Reglas
 
-Las diferencias no deberán eliminarse.
-
-Deben conservarse junto con las observaciones y el usuario responsable.
+* Las diferencias deben conservarse.
+* El usuario responsable debe quedar registrado.
+* El corte no debe eliminarse físicamente.
+* Las observaciones deben conservarse cuando existan.
 
 ---
 
-# 39. Factura (Invoice)
+# 38. Factura (Invoice)
 
 Representa un documento fiscal asociado a una venta.
 
-La emisión será realizada mediante un proveedor externo de facturación.
+La emisión es realizada mediante un proveedor externo.
 
 ## Estados
 
@@ -998,11 +1090,28 @@ ERROR (FAILED)
 CANCELADA (CANCELLED)
 ```
 
-## Regla importante
+## Información conceptual
 
-Una falla del proveedor de facturación **no debe impedir completar la venta**.
+* Venta.
+* Datos fiscales utilizados.
+* Proveedor de facturación.
+* Identificador externo.
+* Estado.
+* Fecha de emisión.
+* Mensaje de error.
+* Fecha de creación.
+* Fecha de modificación.
 
-El sistema deberá permitir:
+## Reglas
+
+* Una factura pertenece a una venta.
+* Una factura debe identificar los datos fiscales utilizados.
+* La factura puede permanecer pendiente.
+* Una falla del proveedor externo no debe impedir completar la venta.
+* La factura podrá procesarse posteriormente.
+* El proveedor externo específico no pertenece al dominio.
+
+Flujo:
 
 ```text
 Venta
@@ -1018,25 +1127,95 @@ Proveedor disponible
 Factura emitida
 ```
 
-El envío de la factura podrá realizarse posteriormente.
+---
+
+# 39. Interés por producto (ProductInterest)
+
+Representa el interés de una persona por adquirir un producto.
+
+El interés puede existir aunque:
+
+* La persona no sea un cliente registrado.
+* El producto todavía no exista en el catálogo.
+
+## Información conceptual
+
+* Cliente, cuando exista.
+* Producto, cuando exista.
+* Nombre solicitado.
+* Notas.
+* Estado.
+* Fecha de creación.
+
+## Reglas
+
+`customer` puede no existir.
+
+`product` puede no existir.
+
+Por lo tanto, ambos pueden estar ausentes simultáneamente.
+
+Si el cliente está registrado, el interés deberá formar parte de su historial.
+
+Si el producto existe, el interés podrá relacionarse con él.
 
 ---
 
-# 40. Registro de auditoría (AuditRecord)
+# 40. Configuración del negocio (BusinessConfiguration)
 
-Representa el historial de una operación o modificación relevante.
+Representa configuraciones generales del sistema que no requieren una entidad de dominio independiente.
 
-## Información
+## Información conceptual
 
-* Usuario.
-* Fecha y hora.
-* Operación.
-* Entidad afectada.
+* Clave.
+* Valor.
+* Tipo de dato.
+* Descripción.
+* Usuario que realizó la última modificación.
+* Fecha de modificación.
+
+La configuración se administra mediante pares:
+
+```text
+key
+value
+data_type
+```
+
+## Regla importante
+
+`BusinessConfiguration` **no deberá utilizarse para sustituir entidades que requieran relaciones propias**.
+
+Por ejemplo, no deberá utilizarse para almacenar:
+
+```text
+Productos
+Descuentos
+Apartados
+Tarifas de servicios
+Métodos de pago
+```
+
+cuando estos conceptos requieren información estructurada y relaciones propias.
+
+Las configuraciones administrativas relevantes deberán quedar auditadas.
+
+---
+
+# 41. Registro de auditoría (AuditRecord)
+
+Representa el historial de una acción o modificación relevante.
+
+## Información conceptual
+
+* Usuario responsable.
+* Acción.
+* Tipo de entidad.
 * Identificador de la entidad.
-* Valor anterior, cuando corresponda.
-* Valor nuevo, cuando corresponda.
+* Valor anterior.
+* Valor nuevo.
 * Motivo.
-* Información adicional.
+* Fecha y hora.
 
 ## Operaciones auditables
 
@@ -1056,218 +1235,197 @@ Como mínimo:
 * Gestión de usuarios.
 * Acceso o modificación de información sensible.
 
-El modelo deberá permitir ampliar posteriormente las operaciones auditadas.
-
----
-
-# 41. Configuración del negocio (BusinessConfiguration)
-
-Representa los parámetros configurables de la papelería.
-
-El sistema deberá evitar que las políticas comerciales estén codificadas permanentemente.
-
-## Configuraciones principales
-
-### Inventario
-
-* Nivel de alerta de existencias por producto.
-
-### Servicios
-
-* Servicios disponibles.
-* Tarifas.
-* Reglas de cálculo.
-
-### Pagos
-
-* Formas de pago disponibles.
-
-### Descuentos
-
-* Porcentajes.
-* Importes.
-* Condiciones.
-
-### Apartados
-
-* Anticipo mínimo.
-* Plazo.
-* Penalización por cancelación.
-* Penalización por vencimiento.
-
-### Catálogo
-
-* Categorías.
-* Marcas.
-* Estados de productos.
+Los registros de auditoría no deben eliminarse físicamente.
 
 ---
 
 # 42. Relaciones principales del dominio
 
-## Cliente — Venta
+## Seguridad
 
 ```text
+Usuario 1 ─────────── 0..* Usuario-Rol
+Rol 1 ─────────────── 0..* Usuario-Rol
+
+Rol 1 ─────────────── 0..* Rol-Permiso
+Permiso 1 ─────────── 0..* Rol-Permiso
+```
+
+Estas relaciones permiten implementar:
+
+```text
+Usuario N:M Rol
+Rol N:M Permiso
+```
+
+---
+
+## Clientes
+
+```text
+Cliente 1 ─────────── 0..* Datos fiscales
 Cliente 1 ─────────── 0..* Venta
-```
-
-Un cliente puede tener múltiples ventas.
-
-Una venta puede realizarse sin cliente registrado.
-
----
-
-## Cliente — Apartado
-
-```text
 Cliente 1 ─────────── 0..* Apartado
+Cliente 1 ─────────── 0..* Interés por producto
 ```
 
-Un cliente puede tener múltiples apartados simultáneamente.
+Una venta puede existir sin cliente.
 
 ---
 
-## Venta — Detalle de venta
+## Catálogo
 
 ```text
-Venta 1 ─────────── 1..* Detalle de venta
+Categoría 1 ───────── 0..* Producto
+Marca 1 ───────────── 0..* Producto
+Servicio 1 ────────── 0..* Tarifa de servicio
 ```
 
-Una venta debe contener al menos un concepto.
+Un producto puede no tener marca.
 
 ---
 
-## Venta — Pago
-
-```text
-Venta 1 ─────────── 1..* Pago
-```
-
-Una venta puede tener uno o varios pagos según las reglas habilitadas.
-
----
-
-## Venta — Devolución
-
-```text
-Venta 1 ─────────── 0..* Devolución
-```
-
-Una venta puede tener múltiples devoluciones parciales.
-
----
-
-## Devolución — Detalle de devolución
-
-```text
-Devolución 1 ─────────── 1..* Detalle de devolución
-```
-
----
-
-## Venta — Factura
-
-```text
-Venta 1 ─────────── 0..* Factura
-```
-
-La facturación depende de la operación externa y puede existir inicialmente como pendiente.
-
----
-
-## Producto — Inventario
+## Inventario
 
 ```text
 Producto 1 ─────────── 1 Inventario
-```
-
-Cada producto físico administrado debe contar con información de existencias.
-
----
-
-## Producto — Movimiento de inventario
-
-```text
 Producto 1 ─────────── 0..* Movimiento de inventario
+Producto 1 ─────────── 0..* Incidencia de inventario
 ```
 
 ---
 
-## Producto — Proveedor
+## Ventas
 
 ```text
-Producto 0..* ─────────── 0..* Proveedor
+Venta 1 ────────────── 1..* Detalle de venta
+Venta 1 ────────────── 0..* Pago
+Venta 1 ────────────── 0..1 Ticket
+Venta 1 ────────────── 0..* Devolución
+Venta 1 ────────────── 0..* Factura
 ```
-
-Un producto puede tener varios proveedores y un proveedor puede ofrecer varios productos.
 
 ---
 
-## Proveedor — Compra
+## Detalle de venta
 
 ```text
-Proveedor 1 ─────────── 0..* Compra
+Producto 1 ─────────── 0..* Detalle de venta
+Servicio 1 ─────────── 0..* Detalle de venta
+Descuento 1 ────────── 0..* Detalle de venta
 ```
 
----
-
-## Compra — Detalle de compra
+Cada detalle de venta debe referenciar exactamente un:
 
 ```text
-Compra 1 ─────────── 1..* Detalle de compra
+Producto
 ```
 
----
-
-## Compra — Incidencia de compra
+o:
 
 ```text
-Compra 1 ─────────── 0..* Incidencia de compra
+Servicio
 ```
 
 ---
 
-## Apartado — Detalle de apartado
+## Pagos
+
+```text
+Método de pago 1 ──── 0..* Pago
+Método de pago 1 ──── 0..* Pago de apartado
+```
+
+---
+
+## Devoluciones
+
+```text
+Devolución 1 ───────── 1..* Detalle de devolución
+Detalle de venta 1 ── 0..* Detalle de devolución
+```
+
+---
+
+## Apartados
 
 ```text
 Apartado 1 ─────────── 1..* Detalle de apartado
+Apartado 1 ─────────── 0..* Pago de apartado
+Producto 1 ─────────── 0..* Detalle de apartado
+```
+
+La configuración de apartados es independiente:
+
+```text
+Configuración de apartados
+          │
+          │ valores aplicados al crear
+          ▼
+      Apartado
+```
+
+Los valores utilizados se conservan como snapshots dentro del apartado.
+
+No existe una relación histórica directa con la configuración actual.
+
+---
+
+## Proveedores y compras
+
+```text
+Proveedor 1 ────────── 0..* Compra
+
+Compra 1 ───────────── 1..* Detalle de compra
+Compra 1 ───────────── 0..* Incidencia de compra
+Detalle de compra 1 ── 0..* Incidencia de compra
+```
+
+Relación producto-proveedor:
+
+```text
+Producto 0..* ──────── 0..* Proveedor
+           mediante
+       ProductSupplier
 ```
 
 ---
 
-## Apartado — Pago de apartado
+## Caja
 
 ```text
-Apartado 1 ─────────── 1..* Pago de apartado
+Usuario 1 ──────────── 0..* Caja
+Caja 1 ─────────────── 0..* Movimiento de caja
+Caja 1 ─────────────── 0..* Corte de caja
+Usuario 1 ──────────── 0..* Movimiento de caja
+Usuario 1 ──────────── 0..* Corte de caja
 ```
 
 ---
 
-## Usuario — Rol
+## Facturación
 
 ```text
-Usuario 0..* ─────────── 1..* Rol
-```
-
-Un usuario puede tener uno o varios roles.
-
-Un rol puede pertenecer a múltiples usuarios.
-
----
-
-## Rol — Permiso
-
-```text
-Rol 0..* ─────────── 1..* Permiso
+Datos fiscales 1 ───── 0..* Factura
+Venta 1 ─────────────── 0..* Factura
 ```
 
 ---
 
-## Usuario — Registro de auditoría
+## Auditoría
 
 ```text
-Usuario 1 ─────────── 0..* Registro de auditoría
+Usuario 1 ──────────── 0..* Registro de auditoría
 ```
+
+La entidad auditada se identifica mediante:
+
+```text
+entity_type
+entity_id
+```
+
+por lo que la auditoría puede abarcar múltiples conceptos del dominio.
 
 ---
 
@@ -1278,123 +1436,60 @@ Usuario 1 ─────────── 0..* Registro de auditoría
 Una venta completada debe:
 
 * Contener al menos un concepto.
-* Tener un pago registrado y confirmado.
+* Tener pagos confirmados suficientes según las reglas de pago.
 * Conservar sus precios históricos.
-* Generar los movimientos correspondientes de inventario.
-* Generar los movimientos correspondientes de caja.
+* Conservar los descuentos utilizados.
+* Generar los movimientos correspondientes de inventario para productos.
+* Generar los movimientos correspondientes de caja cuando corresponda.
 * Identificar al usuario responsable.
 * Conservar su historial.
 
 ---
 
-## 43.2 Inventario
+## 43.2 Detalle de venta
+
+Cada detalle debe representar exactamente uno de:
+
+```text
+Producto
+Servicio
+```
+
+Nunca ambos.
+
+Los valores históricos deben conservarse directamente en el detalle:
+
+```text
+Descripción
+Precio unitario
+Descuento
+Impuesto
+Subtotal
+```
+
+---
+
+## 43.3 Inventario
 
 Una venta normal no deberá permitir vender una cantidad superior a la existencia disponible.
 
-Sin embargo, el sistema deberá permitir que un usuario autorizado registre una incidencia cuando exista una discrepancia física.
-
-Por ejemplo:
+La existencia disponible se obtiene conceptualmente de:
 
 ```text
-Sistema: 6 unidades
-Existencia física: 5 unidades
+Existencia
+-
+Existencia reservada
 ```
 
-La discrepancia deberá poder investigarse sin modificar silenciosamente el historial.
+Cuando exista una discrepancia física, deberá registrarse una incidencia.
+
+El historial de movimientos no deberá modificarse silenciosamente.
 
 ---
 
-## 43.3 Alerta de existencias
+## 43.4 Devoluciones
 
-La alerta deberá generarse utilizando el nivel configurado para cada producto.
-
-Ejemplo:
-
-```text
-Producto A → alerta en 20
-Producto B → alerta en 5
-Producto C → alerta en 50
-```
-
-No existe un único valor global obligatorio.
-
-Durante una venta, si el producto alcanza o se encuentra por debajo de su nivel configurado, el sistema deberá informar al cajero antes de agregarlo al ticket.
-
-El cliente podrá decidir si:
-
-* Lleva la cantidad disponible.
-* Lleva solamente una parte.
-* No lleva el producto.
-
----
-
-# 44. Reglas de apartados
-
-El apartado deberá calcular automáticamente sus importes.
-
-Conceptualmente:
-
-```text
-Total del apartado
-        │
-        ├── Importe pagado
-        │
-        └── Saldo pendiente
-```
-
-Cuando el cliente cancela:
-
-```text
-Importe pagado
-        │
-        ├── Importe conservado por el negocio
-        │
-        └── Importe a devolver
-```
-
-Cuando el apartado vence:
-
-```text
-Total del apartado
-        │
-        ├── Porcentaje conservado
-        │
-        └── Importe restante a devolver
-```
-
-Los porcentajes deberán provenir de la configuración del negocio.
-
----
-
-# 45. Historial de precios
-
-El sistema deberá conservar el precio utilizado en cada operación.
-
-Por lo tanto, modificar el precio actual de un producto no deberá modificar:
-
-* Ventas anteriores.
-* Apartados existentes.
-* Compras anteriores.
-* Devoluciones relacionadas con operaciones anteriores.
-
-Ejemplo:
-
-```text
-Precio enero: $10
-Precio marzo: $12
-```
-
-Una venta de enero debe continuar registrando:
-
-```text
-$10
-```
-
----
-
-# 46. Integridad de devoluciones
-
-La cantidad total devuelta de un producto deberá cumplir:
+La cantidad acumulada devuelta de un detalle de venta no puede superar la cantidad originalmente vendida.
 
 ```text
 Cantidad devuelta acumulada
@@ -1402,13 +1497,107 @@ Cantidad devuelta acumulada
 Cantidad vendida
 ```
 
-Una devolución parcial no deberá alterar ni eliminar el registro original de la venta.
-
-La devolución deberá crear sus propios registros y movimientos.
+La devolución genera nuevos registros y no modifica ni elimina la venta original.
 
 ---
 
-# 47. Integridad de caja
+## 43.5 Apartados
+
+Un apartado debe:
+
+* Tener un cliente registrado.
+* Contener uno o más productos.
+* Tener fecha de vencimiento.
+* Conservar el precio utilizado.
+* Conservar los porcentajes de configuración aplicados.
+* Permitir múltiples pagos.
+* Mantener el saldo pendiente.
+* Mantener las unidades reservadas correspondientes.
+
+---
+
+## 43.6 Historial de precios y costos
+
+Los cambios actuales no deben alterar operaciones históricas.
+
+Se conservarán snapshots en:
+
+```text
+sale_item.unit_price
+sale_item.discount_value
+sale_item.discount_amount
+
+reservation.minimum_percentage_applied
+reservation.cancellation_retention_percentage_applied
+reservation.expiration_retention_percentage_applied
+
+reservation_item.unit_price
+
+purchase_item.unit_cost
+```
+
+Por ejemplo:
+
+```text
+Precio actual del producto: $12
+Precio utilizado en una venta anterior: $10
+```
+
+La venta continuará conservando:
+
+```text
+$10
+```
+
+---
+
+## 43.7 Configuración
+
+Las configuraciones actuales pueden modificarse.
+
+Sin embargo:
+
+```text
+Configuración actual
+        +
+Valor aplicado históricamente
+        +
+Auditoría de cambios
+```
+
+deben mantenerse separados.
+
+Una modificación de:
+
+```text
+discount.value
+```
+
+no debe modificar:
+
+```text
+sale_item.discount_value
+```
+
+de ventas anteriores.
+
+De igual forma, modificar:
+
+```text
+reservation_configuration.minimum_percentage
+```
+
+no modifica:
+
+```text
+reservation.minimum_percentage_applied
+```
+
+de apartados existentes.
+
+---
+
+## 43.8 Caja
 
 Cada movimiento económico deberá poder relacionarse con su operación correspondiente cuando aplique.
 
@@ -1432,11 +1621,11 @@ Reembolso
 Movimiento de caja
 ```
 
-Los ingresos y egresos manuales deberán incluir concepto y usuario responsable.
+Los ingresos y egresos manuales deberán identificar al usuario responsable y conservar una descripción.
 
 ---
 
-# 48. Auditoría e historial
+## 43.9 Auditoría
 
 Las operaciones críticas deberán conservar:
 
@@ -1445,44 +1634,94 @@ Quién
 Qué hizo
 Cuándo
 Sobre qué entidad
-Valor anterior
-Valor nuevo
-Motivo
+Qué valor existía antes
+Qué valor quedó después
+Por qué
 ```
 
-No deberá utilizarse eliminación física para ocultar operaciones históricas.
+Los registros de auditoría no deberán eliminarse físicamente.
 
 ---
 
-# 49. Operación sin conexión
+# 44. Historial y persistencia
 
-El sistema deberá contemplar operaciones locales cuando temporalmente no exista conexión.
+El dominio distingue tres mecanismos de conservación.
 
-Las operaciones realizadas sin conexión deberán conservar:
+## 44.1 Snapshot
 
-* Identificador local.
-* Fecha y hora.
-* Usuario.
-* Operación.
-* Estado de sincronización.
+El snapshot conserva el valor que realmente fue utilizado por una operación.
 
-Estados conceptuales:
+Ejemplos:
 
 ```text
-PENDIENTE DE SINCRONIZACIÓN
-SINCRONIZADA
-ERROR DE SINCRONIZACIÓN
-```
+sale_item.unit_price
+sale_item.discount_value
+sale_item.discount_amount
 
-La estrategia técnica de sincronización se definirá posteriormente.
+reservation.minimum_percentage_applied
+reservation.cancellation_retention_percentage_applied
+reservation.expiration_retention_percentage_applied
+
+reservation_item.unit_price
+
+purchase_item.unit_cost
+```
 
 ---
 
-# 50. Integraciones externas
+## 44.2 Historial operativo
+
+Las operaciones realizadas forman parte del historial del negocio.
+
+Entre ellas:
+
+```text
+Sale
+Payment
+Return
+Reservation
+ReservationPayment
+Purchase
+InventoryMovement
+CashMovement
+CashClosing
+```
+
+Estas operaciones no deberán eliminarse físicamente como mecanismo normal de corrección.
+
+---
+
+## 44.3 Auditoría
+
+Los cambios administrativos relevantes se registran mediante:
+
+```text
+AuditRecord
+```
+
+Esto permite responder:
+
+```text
+¿Qué ocurrió?
+        ↓
+Operación histórica
+
+¿Qué valor se utilizó?
+        ↓
+Snapshot
+
+¿Quién modificó una configuración?
+        ↓
+Auditoría
+```
+
+---
+
+# 45. Integraciones externas
 
 El dominio no deberá depender directamente de proveedores externos.
 
-Las siguientes capacidades podrán integrarse mediante adaptadores:
+Las siguientes capacidades pueden integrarse mediante adaptadores:
 
 ```text
 Facturación
@@ -1491,7 +1730,7 @@ Transferencias
 Correo electrónico
 ```
 
-Por ejemplo:
+La arquitectura conceptual será:
 
 ```text
 Dominio
@@ -1511,87 +1750,163 @@ El proveedor específico será una decisión técnica posterior.
 
 ---
 
-# 51. Evolución hacia múltiples sucursales
+# 46. Evolución hacia múltiples sucursales
 
-Actualmente el sistema contempla una única sucursal.
+Actualmente el modelo contempla una única sucursal.
 
-Sin embargo, el modelo deberá evitar que conceptos como:
+No se incorpora todavía una entidad:
 
-* Inventario.
-* Caja.
-* Usuarios.
-* Ventas.
-* Productos.
+```text
+Branch
+```
 
-queden diseñados de forma que impidan agregar sucursales posteriormente.
+ni se agregan relaciones artificiales para anticipar esta capacidad.
 
-La incorporación de sucursales será una decisión arquitectónica posterior y deberá documentarse mediante ADR cuando se diseñe.
+Sin embargo, el diseño deberá evitar acoplamientos que hagan imposible posteriormente incorporar:
+
+* Sucursales.
+* Inventarios por sucursal.
+* Cajas por sucursal.
+* Operaciones por sucursal.
+* Usuarios asociados a sucursales.
+
+La incorporación de múltiples sucursales será una decisión arquitectónica posterior y deberá documentarse mediante ADR.
 
 ---
 
-# 52. Conceptos que deliberadamente no pertenecen todavía al modelo
+# 47. Conceptos deliberadamente fuera del modelo persistente actual
 
-Los siguientes elementos serán definidos posteriormente:
+Los siguientes elementos no forman parte de las entidades persistentes actuales:
 
-* Tablas de base de datos.
-* Claves primarias físicas.
-* Índices.
-* Restricciones SQL.
+* Tabla `Business`.
+* Tabla `Branch`.
+* Entidad persistente de operación offline.
+* Proveedor específico de facturación.
+* Proveedor específico de pagos.
+* Terminal de pago específica.
 * DTOs.
 * Endpoints.
 * Controladores.
 * Repositorios.
+* Claves primarias físicas.
+* Índices físicos.
+* Migraciones.
 * Frameworks.
-* Estructura de paquetes.
 * Tecnología de frontend.
-* Proveedor específico de facturación.
-* Proveedor específico de pagos.
-* Estrategia concreta de sincronización offline.
 
-El modelo de dominio define **qué representa el negocio**, no todavía **cómo será implementado técnicamente**.
+El modelo de dominio define los conceptos y reglas del negocio.
 
----
-
-# 53. Trazabilidad
-
-El modelo deberá permitir cubrir los principales procesos definidos en los casos de uso.
-
-| Necesidad                  | Conceptos principales                                  |
-| -------------------------- | ------------------------------------------------------ |
-| Registrar venta            | Venta, Detalle de venta, Producto, Pago, Ticket        |
-| Consultar producto         | Producto, Categoría, Marca, Inventario                 |
-| Alertar bajo stock         | Producto, Inventario                                   |
-| Registrar interés          | Interés por producto, Cliente                          |
-| Registrar cliente          | Cliente, Datos fiscales                                |
-| Registrar pago             | Pago, Forma de pago                                    |
-| Cancelar venta             | Venta, Auditoría, Movimiento de inventario             |
-| Devolver productos         | Devolución, Detalle de devolución, Pago, Inventario    |
-| Registrar apartado         | Apartado, Detalle de apartado, Cliente                 |
-| Realizar pagos parciales   | Pago de apartado                                       |
-| Cancelar apartado          | Apartado, Pago de apartado, Configuración de apartados |
-| Vencer apartado            | Apartado, Configuración de apartados                   |
-| Registrar compra           | Compra, Detalle de compra, Proveedor                   |
-| Recibir mercancía          | Compra, Inventario, Movimiento de inventario           |
-| Registrar incidencia       | Incidencia de compra / Incidencia de inventario        |
-| Registrar servicios        | Servicio, Tarifa de servicio                           |
-| Aplicar descuentos         | Descuento, Venta                                       |
-| Registrar ingresos/egresos | Movimiento de caja                                     |
-| Realizar corte             | Caja, Corte de caja                                    |
-| Facturar                   | Factura, Datos fiscales, Venta                         |
-| Gestionar usuarios         | Usuario, Rol, Permiso                                  |
-| Auditar operaciones        | Registro de auditoría                                  |
-| Trabajar sin conexión      | Operación pendiente de sincronización                  |
+El Data Dictionary define posteriormente la estructura persistente de esos conceptos.
 
 ---
 
-# 54. Resumen del modelo
+# 48. Trazabilidad
 
-Los principales agregados conceptuales del dominio son:
+| Necesidad                  | Conceptos principales                                           |
+| -------------------------- | --------------------------------------------------------------- |
+| Registrar venta            | Venta, Detalle de venta, Producto, Servicio, Pago, Ticket       |
+| Consultar producto         | Producto, Categoría, Marca, Inventario                          |
+| Alertar bajo stock         | Producto, Inventario                                            |
+| Registrar interés          | Interés por producto, Cliente, Producto                         |
+| Registrar cliente          | Cliente, Datos fiscales                                         |
+| Registrar pago             | Pago, Método de pago                                            |
+| Cancelar venta             | Venta, Auditoría, Movimiento de inventario                      |
+| Devolver productos         | Devolución, Detalle de devolución, Detalle de venta, Inventario |
+| Registrar apartado         | Apartado, Detalle de apartado, Cliente                          |
+| Realizar pagos parciales   | Pago de apartado                                                |
+| Cancelar apartado          | Apartado, Pago de apartado, Configuración de apartados          |
+| Vencer apartado            | Apartado, Configuración de apartados                            |
+| Registrar compra           | Compra, Detalle de compra, Proveedor                            |
+| Recibir mercancía          | Compra, Inventario, Movimiento de inventario                    |
+| Registrar incidencia       | Incidencia de compra / Incidencia de inventario                 |
+| Registrar servicios        | Servicio, Tarifa de servicio                                    |
+| Aplicar descuentos         | Descuento, Detalle de venta                                     |
+| Registrar ingresos/egresos | Movimiento de caja                                              |
+| Realizar corte             | Caja, Corte de caja                                             |
+| Facturar                   | Factura, Datos fiscales, Venta                                  |
+| Gestionar usuarios         | Usuario, Rol, Permiso                                           |
+| Auditar operaciones        | Registro de auditoría                                           |
+
+---
+
+# 49. Correspondencia con el modelo de datos
+
+Los conceptos persistentes principales del dominio corresponden a las siguientes estructuras:
 
 ```text
-NEGOCIO
+Seguridad
+├── user
+├── role
+├── permission
+├── user_role
+└── role_permission
+
+Clientes
+├── customer
+└── fiscal_data
+
+Catálogo
+├── category
+├── brand
+├── product
+├── service
+├── service_rate
+└── discount
+
+Inventario
+├── inventory
+├── inventory_movement
+└── inventory_incident
+
+Ventas
+├── sale
+├── sale_item
+├── payment
+├── payment_method
+├── ticket
+├── return
+└── return_item
+
+Apartados
+├── reservation
+├── reservation_item
+├── reservation_payment
+└── reservation_configuration
+
+Compras
+├── supplier
+├── product_supplier
+├── purchase
+├── purchase_item
+└── purchase_incident
+
+Caja
+├── cash_register
+├── cash_movement
+└── cash_closing
+
+Facturación
+└── invoice
+
+Intereses y configuración
+├── product_interest
+└── business_configuration
+
+Auditoría
+└── audit_record
+```
+
+Esta correspondencia debe mantenerse alineada con el Data Dictionary definitivo.
+
+---
+
+# 50. Resumen del modelo
+
+```text
+CONTEXTO DEL NEGOCIO
 │
-├── Usuarios
+├── Seguridad
+│   ├── Usuarios
 │   ├── Roles
 │   └── Permisos
 │
@@ -1603,30 +1918,35 @@ NEGOCIO
 │
 ├── Catálogo
 │   ├── Productos
-│   ├── Categorías
-│   ├── Marcas
+│   │   ├── Categoría
+│   │   ├── Marca
+│   │   ├── Inventario
+│   │   └── Proveedores
+│   │
 │   └── Servicios
 │       └── Tarifas
-│
-├── Inventario
-│   ├── Movimientos
-│   └── Incidencias
 │
 ├── Ventas
 │   ├── Detalles
 │   ├── Pagos
 │   ├── Tickets
+│   ├── Descuentos
 │   ├── Devoluciones
 │   └── Facturas
 │
 ├── Apartados
 │   ├── Detalles
 │   ├── Pagos
-│   └── Reglas de configuración
+│   └── Configuración
 │
 ├── Compras
 │   ├── Proveedores
 │   ├── Detalles
+│   └── Incidencias
+│
+├── Inventario
+│   ├── Existencias
+│   ├── Movimientos
 │   └── Incidencias
 │
 ├── Caja
@@ -1638,4 +1958,6 @@ NEGOCIO
 └── Auditoría
 ```
 
-Este modelo constituye la base conceptual para el siguiente nivel de diseño: el **modelo de datos**.
+Este modelo constituye la base conceptual para el modelo entidad-relación y mantiene su estructura alineada con el **Data Dictionary definitivo**.
+
+El Data Dictionary será la referencia para determinar las estructuras persistentes, relaciones, restricciones y campos concretos de la base de datos.
