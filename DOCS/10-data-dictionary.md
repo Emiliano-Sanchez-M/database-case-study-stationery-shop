@@ -735,7 +735,7 @@ PK(product_id, supplier_id)
 | status      | VARCHAR   |       20 |    NO    | CHECK         | Estado              |
 | subtotal    | DECIMAL   |     12,2 |    NO    | CHECK >= 0    | Subtotal            |
 | total       | DECIMAL   |     12,2 |    NO    | CHECK >= 0    | Total               |
-| ordered_at  | TIMESTAMP |        — |    NO    | —             | Fecha de pedido     |
+| ordered_at  | TIMESTAMP |        — |    YES   | —             | Fecha de pedido     |
 | received_at | TIMESTAMP |        — |    YES   | —             | Fecha de recepción  |
 | created_at  | TIMESTAMP |        — |    NO    | DEFAULT       | Creación            |
 
@@ -835,7 +835,7 @@ Los movimientos no se eliminan físicamente.
 | Columna        | Tipo      | Longitud | Nullable | Restricciones | Descripción           |
 | -------------- | --------- | -------: | :------: | ------------- | --------------------- |
 | id             | BIGINT    |        — |    NO    | PK            | Identificador         |
-| sale_id        | BIGINT    |        — |    NO    | FK            | Venta                 |
+| sale_id        | BIGINT    |        — |    NO    | FK UNIQUE     | Venta                 |
 | fiscal_data_id | BIGINT    |        — |    NO    | FK            | Datos fiscales        |
 | provider       | VARCHAR   |       50 |    NO    | —             | Proveedor             |
 | external_id    | VARCHAR   |      100 |    YES   | —             | Identificador externo |
