@@ -1,4 +1,4 @@
--- SEED: User Role
+-- SEED: ROLES USUARIOS
 -- Asigna los roles predeterminados a los usuarios del sistema.
 --
 -- Los valores son ficticios, y estan destinados únicamente al
