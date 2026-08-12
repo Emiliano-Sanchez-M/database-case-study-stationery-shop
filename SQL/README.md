@@ -18,8 +18,18 @@ SQL/
 ├── README.md
 │
 ├── schema/
-    ├── README.
-    └── create.sql
+│   ├── README.
+│   └── create.sql
+├── queries/
+│   ├── user.sql
+│   └── user_authorization.sql
+├── seeds/
+│   ├── 01_insert_user.sql
+│   ├── 02_insert_role.sql
+│   ├── 03_insert_permission.sql
+│   ├── 04_insert_role_permission.sql
+│   └── 05_insert_user_role.sql
+
 ```
 
 > Las carpetas que todavía no sean necesarias podrán incorporarse conforme el proyecto requiera nuevas funcionalidades SQL.
